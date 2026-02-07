@@ -6,18 +6,11 @@
 # The script waits for the dwc2 USB Device Controller to become available
 # (handles boot race conditions where the module hasn't loaded yet).
 #
-# Each gamepad HID report is 3 bytes:
+# Each gamepad HID report is 4 bytes:
 #   Byte 0: X axis (signed, -127..127) — accelerometer tilt left/right
 #   Byte 1: Y axis (signed, -127..127) — accelerometer tilt forward/back
-#   Byte 2: Buttons (8-bit bitmask)
-#       bit 0: D-Pad Left
-#       bit 1: D-Pad Right
-#       bit 2: D-Pad Up
-#       bit 3: D-Pad Down
-#       bit 4: A
-#       bit 5: B
-#       bit 6: Button 1
-#       bit 7: Button 2
+#   Byte 2: Hat switch (low nibble, 0-7=direction, 8=null) + padding
+#   Byte 3: Buttons (low nibble: bit0=A, bit1=B, bit2=1, bit3=2) + padding
 
 set -euo pipefail
 
@@ -74,7 +67,7 @@ UDC_POLL_INTERVAL=2   # seconds between UDC checks
 #     0x95, 0x04        Report Count (4)
 #     0x81, 0x01        Input (Constant)
 #   0xC0              End Collection
-REPORT_DESC_HEX="05010905A101A1000501093009311581257F750895028102C005010939150025073500463B016514750495018142750495018101050919012904150025017501950481027501950481​01C0"
+REPORT_DESC_HEX="05010905A101A1000501093009311581257F750895028102C005010939150025073500463B01651475049501814275049501810105091901290415002501750195048102750195048101C0"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"

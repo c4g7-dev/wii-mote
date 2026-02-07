@@ -198,6 +198,7 @@ class HIDWriter:
     def __init__(self, device_path):
         self.device_path = device_path
         self._fd = None
+        self._reopen_at = 0.0  # earliest time we may retry opening
 
     @property
     def is_open(self):
@@ -212,10 +213,13 @@ class HIDWriter:
         """Try to open the HID gadget device. Returns True on success.
 
         Never raises — returns False if the device doesn't exist or
-        can't be opened. Safe to call repeatedly.
+        can't be opened. Respects a cooldown after write failures to
+        avoid a fast open-fail-close loop. Safe to call repeatedly.
         """
         if self._fd is not None:
             return True
+        if time.time() < self._reopen_at:
+            return False
         if not self.is_available():
             return False
         try:
@@ -224,13 +228,15 @@ class HIDWriter:
             return True
         except OSError as exc:
             logger.debug("Cannot open %s: %s", self.device_path, exc)
+            self._reopen_at = time.time() + HIDG_WAIT_INTERVAL
             return False
 
     def write(self, report):
         """Write a raw HID report (bytes) to the device.
 
         Silently drops the report if the device isn't open.
-        Closes the device on write failure (e.g. USB cable unplugged).
+        Closes the device on write failure (e.g. USB cable unplugged)
+        and sets a cooldown before retrying to avoid rapid retry loops.
         """
         if self._fd is None:
             return
@@ -239,6 +245,7 @@ class HIDWriter:
         except OSError as exc:
             logger.warning("Write to %s failed (USB disconnected?): %s", self.device_path, exc)
             self.close()
+            self._reopen_at = time.time() + HIDG_WAIT_INTERVAL
 
     def release_all(self):
         """Send a zero report (all buttons released, axes centered)."""
