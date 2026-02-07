@@ -118,11 +118,11 @@ cd "${GADGET_DIR}"
 # USB device descriptor
 echo 0x1d6b > idVendor        # Linux Foundation
 echo 0x0104 > idProduct       # Multifunction Composite Gadget
-echo 0x0100 > bcdDevice       # v1.0.0
+echo 0x0200 > bcdDevice       # v2.0.0 (bumped to force re-enum)
 echo 0x0200 > bcdUSB          # USB 2.0
-echo 0xEF   > bDeviceClass    # Misc Device (composite)
-echo 0x02   > bDeviceSubClass # Common Class
-echo 0x01   > bDeviceProtocol # Interface Association Descriptor
+echo 0x00   > bDeviceClass    # Defined at interface level
+echo 0x00   > bDeviceSubClass
+echo 0x00   > bDeviceProtocol
 
 # Device strings
 mkdir -p strings/0x409
