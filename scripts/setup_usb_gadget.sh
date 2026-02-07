@@ -10,7 +10,7 @@
 #   Byte 0: X axis (signed, -127..127) — accelerometer tilt left/right
 #   Byte 1: Y axis (signed, -127..127) — accelerometer tilt forward/back
 #   Byte 2: Hat switch (low nibble, 0-7=direction, 8=null) + padding
-#   Byte 3: Buttons (low nibble: bit0=A, bit1=B, bit2=1, bit3=2) + padding
+#   Byte 3: Buttons (8 bits: A, B, 1, 2, Plus, Minus, Home, reserved)
 
 set -euo pipefail
 
@@ -20,13 +20,21 @@ UDC_WAIT_TIMEOUT=120  # seconds to wait for UDC to appear
 UDC_POLL_INTERVAL=2   # seconds between UDC checks
 
 # HID Report Descriptor for a gamepad:
-#   2 axes (signed byte each) + hat switch (D-pad) + 4 buttons
+#   2 axes (signed byte each) + hat switch (D-pad) + 8 buttons
 #
 # Report format (4 bytes):
 #   Byte 0: X axis (signed, -127..127) — accelerometer tilt left/right
 #   Byte 1: Y axis (signed, -127..127) — accelerometer tilt forward/back
 #   Byte 2: Hat switch (low nibble, 0-7=direction, 8+=null) + padding
-#   Byte 3: Buttons (low nibble: bit0=A, bit1=B, bit2=1, bit3=2) + padding
+#   Byte 3: Buttons (8-bit bitmask)
+#       bit 0: A       → Android BUTTON_A
+#       bit 1: B       → Android BUTTON_B
+#       bit 2: 1       → Android BUTTON_C
+#       bit 3: 2       → Android BUTTON_X
+#       bit 4: Plus    → Android BUTTON_Y
+#       bit 5: Minus   → Android BUTTON_Z
+#       bit 6: Home    → Android BUTTON_MODE
+#       bit 7: (reserved)
 #
 # Decoded:
 #   0x05, 0x01        Usage Page (Generic Desktop)
@@ -57,17 +65,14 @@ UDC_POLL_INTERVAL=2   # seconds between UDC checks
 #     0x81, 0x01        Input (Constant)
 #     0x05, 0x09        Usage Page (Button)
 #     0x19, 0x01        Usage Minimum (Button 1)
-#     0x29, 0x04        Usage Maximum (Button 4)
+#     0x29, 0x08        Usage Maximum (Button 8)
 #     0x15, 0x00        Logical Minimum (0)
 #     0x25, 0x01        Logical Maximum (1)
 #     0x75, 0x01        Report Size (1)
-#     0x95, 0x04        Report Count (4)
+#     0x95, 0x08        Report Count (8)
 #     0x81, 0x02        Input (Data, Var, Abs)
-#     0x75, 0x01        Report Size (1)   — padding
-#     0x95, 0x04        Report Count (4)
-#     0x81, 0x01        Input (Constant)
 #   0xC0              End Collection
-REPORT_DESC_HEX="05010905A101A1000501093009311581257F750895028102C005010939150025073500463B01651475049501814275049501810105091901290415002501750195048102750195048101C0"
+REPORT_DESC_HEX="05010905A101A1000501093009311581257F750895028102C005010939150025073500463B01651475049501814275049501810105091901290815002501750195088102C0"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"

@@ -16,15 +16,19 @@ HID report format (4 bytes per gamepad):
     Byte 2: Hat switch (low nibble) — D-Pad direction
         0=Up, 1=Up-Right, 2=Right, 3=Down-Right,
         4=Down, 5=Down-Left, 6=Left, 7=Up-Left, 8=None
-    Byte 3: Buttons bitmask (low nibble)
+    Byte 3: Buttons bitmask (8 bits)
         bit 0: A      → Android BUTTON_A
         bit 1: B      → Android BUTTON_B
         bit 2: Button 1 → Android BUTTON_C
         bit 3: Button 2 → Android BUTTON_X
+        bit 4: Plus   → Android BUTTON_Y
+        bit 5: Minus  → Android BUTTON_Z
+        bit 6: Home   → Android BUTTON_MODE
+        bit 7: (reserved)
 
 Special combos:
-    + and - together: disconnect this Wiimote
-    Home:             recalibrate accelerometer zero-point
+    + and - together (held 1s): disconnect this Wiimote
+    Home (held 2s):             recalibrate accelerometer zero-point
 """
 
 import logging
@@ -64,6 +68,8 @@ SCAN_RETRY_DELAY = 2.0  # seconds between scan attempts
 HIDG_WAIT_INTERVAL = 3.0  # seconds between checks for /dev/hidg* availability
 CONNECT_RUMBLE_DURATION = 0.3  # seconds of rumble on connect
 DISCONNECT_RUMBLE_DURATION = 0.5  # seconds of rumble on manual disconnect
+DISCONNECT_HOLD_TIME = 1.0  # seconds to hold +/- combo to disconnect
+RECALIBRATE_HOLD_TIME = 2.0  # seconds to hold Home to recalibrate
 
 # LED bitmasks for player numbers (cwiid LED constants)
 PLAYER_LEDS = [
@@ -125,10 +131,13 @@ def acc_to_axis(raw, zero, sensitivity=ACC_SENSITIVITY):
 # Mapping table: (cwiid button constant, HID button bit)
 # D-Pad is handled separately via hat switch — only face buttons here.
 _BUTTON_MAP = (
-    (cwiid.BTN_A,  0x01),  # bit 0: Button 1 → Android BUTTON_A
-    (cwiid.BTN_B,  0x02),  # bit 1: Button 2 → Android BUTTON_B
-    (cwiid.BTN_1,  0x04),  # bit 2: Button 3 → Android BUTTON_C
-    (cwiid.BTN_2,  0x08),  # bit 3: Button 4 → Android BUTTON_X
+    (cwiid.BTN_A,     0x01),  # bit 0: Button 1 → Android BUTTON_A
+    (cwiid.BTN_B,     0x02),  # bit 1: Button 2 → Android BUTTON_B
+    (cwiid.BTN_1,     0x04),  # bit 2: Button 3 → Android BUTTON_C
+    (cwiid.BTN_2,     0x08),  # bit 3: Button 4 → Android BUTTON_X
+    (cwiid.BTN_PLUS,  0x10),  # bit 4: Button 5 → Android BUTTON_Y
+    (cwiid.BTN_MINUS, 0x20),  # bit 5: Button 6 → Android BUTTON_Z
+    (cwiid.BTN_HOME,  0x40),  # bit 6: Button 7 → Android BUTTON_MODE
 )
 
 
@@ -297,6 +306,10 @@ class PlayerSlot:
         self._acc_zero = DEFAULT_ACC_ZERO
         self._usb_was_connected = False
 
+        # Track hold durations for special combos
+        self._disconnect_held_since = None  # time when +/- combo first held
+        self._home_held_since = None        # time when Home first held
+
     def start(self):
         """Start the player slot thread (scan + forward loop)."""
         self._running = True
@@ -423,6 +436,9 @@ class PlayerSlot:
         - If a write fails (USB cable unplugged), closes the HID device
           and continues polling; will reopen when USB returns.
         """
+        self._disconnect_held_since = None
+        self._home_held_since = None
+
         while self._running:
             try:
                 state = wiimote.state
@@ -433,12 +449,12 @@ class PlayerSlot:
 
             buttons = state.get("buttons", 0)
 
-            # Handle special button combos (disconnect, recalibrate)
+            # Check for held special combos (triggers after hold duration)
             action = self._handle_special_combos(wiimote, buttons)
             if action == "disconnect":
                 break
-            if action == "recalibrate":
-                continue
+            # Note: recalibrate doesn't skip the report — buttons
+            # (including Home) are still sent while holding.
 
             # Build HID report from Wiimote state
             report = self._build_report_from_state(state, buttons)
@@ -449,24 +465,42 @@ class PlayerSlot:
             time.sleep(POLL_INTERVAL)
 
     def _handle_special_combos(self, wiimote, buttons):
-        """Check for special button combos. Returns action string or None."""
-        # Disconnect combo: + and - pressed together
-        if (buttons & cwiid.BTN_PLUS) and (buttons & cwiid.BTN_MINUS):
-            logger.info("[%s] Disconnect combo pressed (+/-)", self.player_label)
-            try:
-                wiimote.rumble = True
-                time.sleep(DISCONNECT_RUMBLE_DURATION)
-                wiimote.rumble = False
-            except Exception:
-                pass
-            return "disconnect"
+        """Check for held special combos. Returns action string or None.
 
-        # Recalibrate combo: Home button
+        Buttons are always forwarded as HID reports — combos only trigger
+        after being held for a duration threshold.
+        """
+        now = time.time()
+
+        # Disconnect combo: + and - held together for DISCONNECT_HOLD_TIME
+        if (buttons & cwiid.BTN_PLUS) and (buttons & cwiid.BTN_MINUS):
+            if self._disconnect_held_since is None:
+                self._disconnect_held_since = now
+            elif now - self._disconnect_held_since >= DISCONNECT_HOLD_TIME:
+                logger.info("[%s] Disconnect combo held (+/-)", self.player_label)
+                try:
+                    wiimote.rumble = True
+                    time.sleep(DISCONNECT_RUMBLE_DURATION)
+                    wiimote.rumble = False
+                except Exception:
+                    pass
+                return "disconnect"
+        else:
+            self._disconnect_held_since = None
+
+        # Recalibrate: Home held for RECALIBRATE_HOLD_TIME
         if buttons & cwiid.BTN_HOME:
-            logger.info("[%s] Recalibrating accelerometer (Home pressed)", self.player_label)
-            self._calibrate_accelerometer(wiimote)
-            time.sleep(0.5)
-            return "recalibrate"
+            if self._home_held_since is None:
+                self._home_held_since = now
+            elif now - self._home_held_since >= RECALIBRATE_HOLD_TIME:
+                logger.info(
+                    "[%s] Recalibrating accelerometer (Home held)",
+                    self.player_label,
+                )
+                self._calibrate_accelerometer(wiimote)
+                self._home_held_since = None  # reset so it doesn't re-trigger
+        else:
+            self._home_held_since = None
 
         return None
 
