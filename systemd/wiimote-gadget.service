@@ -1,0 +1,14 @@
+[Unit]
+Description=Setup USB HID Gamepad Gadget (configfs)
+DefaultDependencies=no
+After=sysinit.target systemd-modules-load.service
+Before=wiimote-bridge.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/wiimote-bridge/setup_usb_gadget.sh
+ExecStop=/opt/wiimote-bridge/teardown_usb_gadget.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

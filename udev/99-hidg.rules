@@ -1,0 +1,3 @@
+# Ensure /dev/hidg* devices are world-readable/writable
+# so the bridge daemon can write HID reports without root after initial setup.
+KERNEL=="hidg[0-9]*", MODE="0666"

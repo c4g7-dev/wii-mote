@@ -1,0 +1,25 @@
+[Unit]
+Description=Wiimote to USB Gamepad Bridge
+After=bluetooth.target wiimote-gadget.service
+Requires=wiimote-gadget.service
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 3
+ExecStart=/usr/bin/python3 /opt/wiimote-bridge/wiimote_bridge.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wiimote-bridge
+
+# Run as root (needed for /dev/hidg* access and Bluetooth)
+User=root
+
+# Hardening
+ProtectHome=read-only
+NoNewPrivileges=no
+
+[Install]
+WantedBy=multi-user.target
