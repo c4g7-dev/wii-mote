@@ -15,7 +15,7 @@
 set -euo pipefail
 
 GADGET_DIR="/sys/kernel/config/usb_gadget/wiimote_gamepad"
-NUM_PLAYERS=2
+NUM_PLAYERS=4
 UDC_WAIT_TIMEOUT=120  # seconds to wait for UDC to appear
 UDC_POLL_INTERVAL=2   # seconds between UDC checks
 

@@ -55,7 +55,7 @@ except ImportError:
 # Configuration
 # ---------------------------------------------------------------------------
 
-NUM_PLAYERS = 2
+NUM_PLAYERS = 4
 
 # Module-level lock: only one thread may perform a Bluetooth scan at a time.
 # The Pi Zero W's single HCI adapter cannot handle concurrent inquiry scans;
@@ -75,6 +75,8 @@ RECALIBRATE_HOLD_TIME = 5.0  # seconds to hold Home to recalibrate
 PLAYER_LEDS = [
     cwiid.LED1_ON,                          # Player 1: LED 1
     cwiid.LED2_ON,                          # Player 2: LED 2
+    cwiid.LED3_ON,                          # Player 3: LED 3
+    cwiid.LED4_ON,                          # Player 4: LED 4
 ]
 
 # Accelerometer defaults (overridden by per-Wiimote calibration)
