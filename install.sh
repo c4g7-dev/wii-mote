@@ -154,7 +154,19 @@ systemctl start bluetooth.service 2>/dev/null || true
 # Ensure Bluetooth is not soft-blocked by rfkill (common on Pi Zero W)
 log_info "Unblocking Bluetooth via rfkill..."
 rfkill unblock bluetooth 2>/dev/null || true
-hciconfig hci0 up 2>/dev/null || true
+hciconfig hci0 up piscan 2>/dev/null || true
+
+# Allow unbonded classic Bluetooth devices (required for Wiimote pairing via cwiid)
+BT_INPUT_CONF="/etc/bluetooth/input.conf"
+if [ -f "${BT_INPUT_CONF}" ]; then
+    if grep -q "^#ClassicBondedOnly=true" "${BT_INPUT_CONF}"; then
+        log_info "Setting ClassicBondedOnly=false in ${BT_INPUT_CONF}"
+        sed -i 's/^#ClassicBondedOnly=true/ClassicBondedOnly=false/' "${BT_INPUT_CONF}"
+    elif ! grep -q "^ClassicBondedOnly=false" "${BT_INPUT_CONF}"; then
+        log_info "Adding ClassicBondedOnly=false to ${BT_INPUT_CONF}"
+        sed -i '/^\[General\]/a ClassicBondedOnly=false' "${BT_INPUT_CONF}"
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # Done
